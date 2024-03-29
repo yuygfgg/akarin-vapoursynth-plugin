@@ -673,7 +673,7 @@ Value *Nucleus::allocateStackVariable(Type *type, int arraySize)
 		declaration = new llvm::AllocaInst(T(type), 0, (llvm::Value *)nullptr, align);
 	}
 
-	entryBlock.getInstList().push_front(declaration);
+	declaration->insertInto(&entryBlock, entryBlock.begin());
 
 	return V(declaration);
 }
