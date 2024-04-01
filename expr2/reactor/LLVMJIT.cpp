@@ -31,14 +31,23 @@ __pragma(warning(push))
 #include "llvm/ExecutionEngine/Orc/RTDyldObjectLinkingLayer.h"
 #include "llvm/ExecutionEngine/SectionMemoryManager.h"
 #include "llvm/IR/DiagnosticInfo.h"
-#include "llvm/IR/LegacyPassManager.h"
+#include "llvm/IR/PassManager.h"
+#include "llvm/Passes/PassBuilder.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Host.h"
 #include "llvm/Support/TargetSelect.h"
 #include "llvm/Transforms/InstCombine/InstCombine.h"
 #include "llvm/Transforms/Instrumentation/MemorySanitizer.h"
-#include "llvm/Transforms/Scalar.h"
+#include "llvm/Transforms/Scalar/ADCE.h"
+#include "llvm/Transforms/Scalar/DeadStoreElimination.h"
+#include "llvm/Transforms/Scalar/EarlyCSE.h"
 #include "llvm/Transforms/Scalar/GVN.h"
+#include "llvm/Transforms/Scalar/LICM.h"
+#include "llvm/Transforms/Scalar/Reassociate.h"
+#include "llvm/Transforms/Scalar/SCCP.h"
+#include "llvm/Transforms/Scalar/SROA.h"
+#include "llvm/Transforms/Scalar/SimplifyCFG.h"
+
 #include "llvm/Transforms/IPO.h"
 
 #ifdef _MSC_VER
@@ -204,8 +213,12 @@ JITGlobals *JITGlobals::get()
 		//jitTargetMachineBuilder.setCodeModel(llvm::CodeModel::Small);
 
 		// Reactor's MemorySanitizer support depends on intercepting __emutls_get_address calls.
+#if LLVM_VERSION_MAJOR < 17
 		ASSERT(!__has_feature(memory_sanitizer) || (jitTargetMachineBuilder.getOptions().ExplicitEmulatedTLS &&
 		                                            jitTargetMachineBuilder.getOptions().EmulatedTLS));
+#else
+		ASSERT(!__has_feature(memory_sanitizer) || jitTargetMachineBuilder.getOptions().EmulatedTLS);
+#endif
 
 		auto dataLayout = jitTargetMachineBuilder.getDefaultDataLayoutForTarget();
 		if (!dataLayout) {
@@ -606,13 +619,25 @@ class ExternalSymbolGenerator : public llvm::orc::JITDylib::DefinitionGenerator
 			// to append these on macOS.
 			auto trimmed = (*name).drop_while([](char c) { return c == '_'; });
 
+#if LLVM_VERSION_MAJOR < 17
+			auto toSymbol = [](void *ptr) {
+				return llvm::JITEvaluatedSymbol(
+					static_cast<llvm::JITTargetAddress>(reinterpret_cast<uintptr_t>(ptr)),
+					llvm::JITSymbolFlags::Exported);
+			};
+#else
+			auto toSymbol = [](void *ptr) {
+				return llvm::orc::ExecutorSymbolDef{
+					llvm::orc::ExecutorAddr(reinterpret_cast<uintptr_t>(ptr)),
+					llvm::JITSymbolFlags::Exported,
+				};
+			};
+#endif
+
 			auto it = resolver.functions.find(trimmed.str());
 			if(it != resolver.functions.end())
 			{
-				symbols[name] = llvm::JITEvaluatedSymbol(
-				    static_cast<llvm::JITTargetAddress>(reinterpret_cast<uintptr_t>(it->second)),
-				    llvm::JITSymbolFlags::Exported);
-
+				symbols[name] = toSymbol(it->second);
 				continue;
 			}
 
@@ -627,10 +652,7 @@ class ExternalSymbolGenerator : public llvm::orc::JITDylib::DefinitionGenerator
 
 			if(address)
 			{
-				symbols[name] = llvm::JITEvaluatedSymbol(
-				    static_cast<llvm::JITTargetAddress>(reinterpret_cast<uintptr_t>(address)),
-				    llvm::JITSymbolFlags::Exported);
-
+				symbols[name] = toSymbol(it->second);
 				continue;
 			}
 #endif
@@ -809,7 +831,11 @@ public:
 			}
 			else  // Successful compilation
 			{
+#if LLVM_VERSION_MAJOR < 17
 				addresses[i] = reinterpret_cast<void *>(static_cast<intptr_t>(symbol->getAddress()));
+#else
+				addresses[i] = reinterpret_cast<void *>(static_cast<intptr_t>(symbol->getAddress().getValue()));
+#endif
 			}
 		}
 
@@ -866,12 +892,27 @@ void JITBuilder::optimize(const rr::Config &cfg)
 	}
 #endif  // ENABLE_RR_DEBUG_INFO
 
-	llvm::legacy::PassManager passManager;
+	llvm::LoopAnalysisManager lam;
+	llvm::FunctionAnalysisManager fam;
+	llvm::CGSCCAnalysisManager cgam;
+	llvm::ModuleAnalysisManager mam;
+	llvm::PassBuilder pb;
+
+	pb.registerModuleAnalyses(mam);
+	pb.registerCGSCCAnalyses(cgam);
+	pb.registerFunctionAnalyses(fam);
+	pb.registerLoopAnalyses(lam);
+	pb.crossRegisterProxies(lam, fam, cgam, mam);
+
+	llvm::ModulePassManager pm;
+	llvm::FunctionPassManager fpm;
 
 #if REACTOR_ENABLE_MEMORY_SANITIZER_INSTRUMENTATION
 	if(__has_feature(memory_sanitizer))
 	{
-		passManager.add(llvm::createMemorySanitizerLegacyPassPass());
+		llvm::MemorySanitizerOptions msanOpts;
+		pm.addPass(llvm::ModuleMemorySanitizerPass(msanOpts));
+		pm.addPass(llvm::createModuleToFunctionPassAdaptor(llvm::MemorySanitizerPass(msanOpts)));
 	}
 #endif
 
@@ -880,23 +921,30 @@ void JITBuilder::optimize(const rr::Config &cfg)
 		switch(pass)
 		{
 		case rr::Optimization::Pass::Disabled: break;
-		case rr::Optimization::Pass::CFGSimplification: passManager.add(llvm::createCFGSimplificationPass()); break;
-		case rr::Optimization::Pass::LICM: passManager.add(llvm::createLICMPass()); break;
-		case rr::Optimization::Pass::AggressiveDCE: passManager.add(llvm::createAggressiveDCEPass()); break;
-		case rr::Optimization::Pass::GVN: passManager.add(llvm::createGVNPass()); break;
-		case rr::Optimization::Pass::InstructionCombining: passManager.add(llvm::createInstructionCombiningPass()); break;
-		case rr::Optimization::Pass::Reassociate: passManager.add(llvm::createReassociatePass()); break;
-		case rr::Optimization::Pass::DeadStoreElimination: passManager.add(llvm::createDeadStoreEliminationPass()); break;
-		case rr::Optimization::Pass::SCCP: passManager.add(llvm::createSCCPPass()); break;
-		case rr::Optimization::Pass::ScalarReplAggregates: passManager.add(llvm::createSROAPass()); break;
-		case rr::Optimization::Pass::EarlyCSEPass: passManager.add(llvm::createEarlyCSEPass()); break;
-		case rr::Optimization::Pass::Inline: passManager.add(llvm::createFunctionInliningPass()); break;
+		case rr::Optimization::Pass::CFGSimplification: fpm.addPass(llvm::SimplifyCFGPass()); break;
+		case rr::Optimization::Pass::LICM: fpm.addPass(llvm::createFunctionToLoopPassAdaptor(
+			llvm::LICMPass(llvm::SetLicmMssaOptCap, llvm::SetLicmMssaNoAccForPromotionCap, true)));
+			break;
+		case rr::Optimization::Pass::AggressiveDCE: fpm.addPass(llvm::ADCEPass()); break;
+		case rr::Optimization::Pass::GVN: fpm.addPass(llvm::GVNPass()); break;
+		case rr::Optimization::Pass::InstructionCombining: fpm.addPass(llvm::InstCombinePass()); break;
+		case rr::Optimization::Pass::Reassociate: fpm.addPass(llvm::ReassociatePass()); break;
+		case rr::Optimization::Pass::DeadStoreElimination: fpm.addPass(llvm::DSEPass()); break;
+		case rr::Optimization::Pass::SCCP: fpm.addPass(llvm::SCCPPass()); break;
+		case rr::Optimization::Pass::ScalarReplAggregates: fpm.addPass(llvm::SROAPass(llvm::SROAOptions::PreserveCFG)); break;
+		case rr::Optimization::Pass::EarlyCSEPass: fpm.addPass(llvm::EarlyCSEPass()); break;
+		case rr::Optimization::Pass::Inline: break;
 		default:
 			UNREACHABLE("pass: %d", int(pass));
 		}
 	}
 
-	passManager.run(*module);
+	if(!fpm.isEmpty())
+	{
+			pm.addPass(llvm::createModuleToFunctionPassAdaptor(std::move(fpm)));
+	}
+
+	pm.run(*module, mam);
 }
 
 std::shared_ptr<rr::Routine> JITBuilder::acquireRoutine(const char *name, llvm::Function **funcs, size_t count, const rr::Config &cfg)
