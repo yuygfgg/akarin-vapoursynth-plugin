@@ -923,7 +923,7 @@ void JITBuilder::optimize(const rr::Config &cfg)
 		case rr::Optimization::Pass::Disabled: break;
 		case rr::Optimization::Pass::CFGSimplification: fpm.addPass(llvm::SimplifyCFGPass()); break;
 		case rr::Optimization::Pass::LICM: fpm.addPass(llvm::createFunctionToLoopPassAdaptor(
-			llvm::LICMPass(llvm::SetLicmMssaOptCap, llvm::SetLicmMssaNoAccForPromotionCap, true)));
+			llvm::LICMPass(llvm::SetLicmMssaOptCap, llvm::SetLicmMssaNoAccForPromotionCap, true), true));
 			break;
 		case rr::Optimization::Pass::AggressiveDCE: fpm.addPass(llvm::ADCEPass()); break;
 		case rr::Optimization::Pass::GVN: fpm.addPass(llvm::GVNPass()); break;
