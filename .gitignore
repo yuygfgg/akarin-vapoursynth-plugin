@@ -2,3 +2,4 @@
 .logs/*
 .vscode/*
 .DS_Store
+checks.json

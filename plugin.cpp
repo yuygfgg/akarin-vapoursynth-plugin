@@ -10,6 +10,7 @@
 #include "vfx/internalfilters.h"
 #include "banding/internalfilters.h"
 #include "text/internalfilters.h"
+#include "pickframes/internalfilters.h"
 
 static std::vector<VSPublicFunction> versionFuncs;
 
@@ -37,4 +38,5 @@ VS_EXTERNAL_API(void) VapourSynthPluginInit(VSConfigPlugin configFunc, VSRegiste
     bandingInitialize(configFunc, registerFunc, plugin);
     textInitialize(configFunc, registerFunc, plugin);
     tmplInitialize(configFunc, registerFunc, plugin);
+    pickframeslInitialize(configFunc, registerFunc, plugin);
 }

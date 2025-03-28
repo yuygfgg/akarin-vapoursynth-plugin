@@ -68,6 +68,10 @@ sources_text = [
   'text/tmplfilter.cpp',
 ]
 
+sources_pickframes = [
+  'pickframes/PickFrames.cpp'
+]
+
 sources_common = [
   # main plugin
   'plugin.cpp',
@@ -101,6 +105,7 @@ endif
 
 sources += sources_banding
 sources += sources_text
+sources += sources_pickframes
 
 vapoursynth_dep = dependency('vapoursynth').partial_dependency(compile_args: true, includes: true)
 
