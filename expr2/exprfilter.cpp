@@ -17,6 +17,7 @@
 * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 */
 
+#include "Reactor.hpp"
 #define USE_EXPR_CACHE
 
 #include <algorithm>
@@ -74,6 +75,9 @@ enum class ExprOpType {
     // Ternary operator
     TERNARY,
 
+    // Linear Interpolation
+    LERP,
+
     // Rank-order operator
     SORT,
 
@@ -98,6 +102,7 @@ std::vector<std::string> features = {
     "var@", "var!",
     "x[x,y]", "x[x,y]:m",
     "drop",
+    "lerp",
     "sort",
     "x[]",
     "bitand", "bitor", "bitxor", "bitnot",
@@ -114,6 +119,7 @@ std::vector<std::string> selectFeatures = {
     "trunc", "round", "floor",
     "var@", "var!",
     "drop",
+    "lerp",
     "sort",
     "bitand", "bitor", "bitxor", "bitnot",
     clipNamePrefix + "0", clipNamePrefix + "26",
@@ -264,6 +270,7 @@ ExprOp decodeToken(const std::string &token, bool extended = false)
         { "**",   { ExprOpType::POW } },
         { "sin",  { ExprOpType::SIN } },
         { "cos",  { ExprOpType::COS } },
+        { "lerp", { ExprOpType::LERP } },
         { "dup",  { ExprOpType::DUP, 0 } },
         { "swap", { ExprOpType::SWAP, 1 } },
         { "drop", { ExprOpType::DROP, 1 } },
@@ -854,6 +861,7 @@ void Compiler<lanes>::buildOneIter(const Helper &helpers, State &state)
         0, // DUP
         0, // SWAP
         0, // DROP
+        3, // LERP
     };
     static_assert(sizeof(numOperands) == static_cast<unsigned>(ExprOpType::LAST) + 1, "invalid table");
 
@@ -1098,6 +1106,17 @@ void Compiler<lanes>::buildOneIter(const Helper &helpers, State &state)
         case ExprOpType::VAR_STORE: {
             LOAD1(x);
             state.variables[op.imm.i] = x;
+            break;
+        }
+
+        case ExprOpType::LERP: {
+            LOAD1(t);
+            LOAD1(b);
+            LOAD1(a);
+            auto one_minus_t = operator-(Value(1.0f).ensureFloat(), t.ensureFloat());
+            Value part1 = one_minus_t * a.ensureFloat();
+            Value part2 = t.ensureFloat() * b.ensureFloat();
+            OUT(operator+(part1.ensureFloat(), part2.ensureFloat()));
             break;
         }
 
@@ -1789,6 +1808,15 @@ float interpret(const std::vector<ExprOp> &ops, int N, int width, int height, in
             LOAD2(t, f);
             LOAD1(c);
             OUT((c > 0.0f ? t : f));
+            break;
+        }
+
+        // Linear Interpolation
+        case ExprOpType::LERP: {
+            LOAD1(t);
+            LOAD1(b);
+            LOAD1(a);
+            OUT((1 - t) * a + t * b);
             break;
         }
 
