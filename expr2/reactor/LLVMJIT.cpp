@@ -19,6 +19,9 @@
 #include "ExecutableMemory.hpp"
 #include "LLVMAsm.hpp"
 #include "Routine.hpp"
+#include "llvm/Passes/OptimizationLevel.h"
+#include "llvm/Transforms/IPO/GlobalDCE.h"
+#include "llvm/Transforms/Scalar/LoopFuse.h"
 
 // TODO(b/143539525): Eliminate when warning has been fixed.
 #ifdef _MSC_VER
@@ -898,6 +901,7 @@ void JITBuilder::optimize(const rr::Config &cfg)
 
 	llvm::ModulePassManager pm;
 	llvm::FunctionPassManager fpm;
+	llvm::CGSCCPassManager cgpm;
 
 #if REACTOR_ENABLE_MEMORY_SANITIZER_INSTRUMENTATION
 	if(__has_feature(memory_sanitizer))
@@ -925,17 +929,21 @@ void JITBuilder::optimize(const rr::Config &cfg)
 		case rr::Optimization::Pass::SCCP: fpm.addPass(llvm::SCCPPass()); break;
 		case rr::Optimization::Pass::ScalarReplAggregates: fpm.addPass(llvm::SROAPass(llvm::SROAOptions::PreserveCFG)); break;
 		case rr::Optimization::Pass::EarlyCSEPass: fpm.addPass(llvm::EarlyCSEPass()); break;
-		case rr::Optimization::Pass::Inline: break;
+		case rr::Optimization::Pass::Inline: cgpm.addPass(llvm::InlinerPass()); pm.addPass(llvm::GlobalDCEPass()); break;
 		default:
 			UNREACHABLE("pass: %d", int(pass));
 		}
 	}
-
+	pm = pb.buildModuleOptimizationPipeline(llvm::OptimizationLevel::O3, llvm::ThinOrFullLTOPhase::None);
 	if(!fpm.isEmpty())
 	{
-			pm.addPass(llvm::createModuleToFunctionPassAdaptor(std::move(fpm)));
+		pm.addPass(llvm::createModuleToFunctionPassAdaptor(std::move(fpm)));
 	}
-
+	if(!cgpm.isEmpty())
+	{
+		pm.addPass(llvm::createModuleToPostOrderCGSCCPassAdaptor(std::move(cgpm)));
+	}
+	
 	pm.run(*module, mam);
 }
 
