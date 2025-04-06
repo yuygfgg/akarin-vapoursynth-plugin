@@ -19,9 +19,14 @@
 #include "ExecutableMemory.hpp"
 #include "LLVMAsm.hpp"
 #include "Routine.hpp"
+#include "llvm/Analysis/LoopInfo.h"
 #include "llvm/Passes/OptimizationLevel.h"
 #include "llvm/Transforms/IPO/GlobalDCE.h"
+#include "llvm/Transforms/IPO/ModuleInliner.h"
 #include "llvm/Transforms/Scalar/LoopFuse.h"
+#include "llvm/Transforms/Scalar/LoopUnrollAndJamPass.h"
+#include "llvm/Transforms/Scalar/InductiveRangeCheckElimination.h"
+#include "llvm/ExecutionEngine/Orc/AbsoluteSymbols.h"
 
 // TODO(b/143539525): Eliminate when warning has been fixed.
 #ifdef _MSC_VER
@@ -920,6 +925,8 @@ void JITBuilder::optimize(const rr::Config &cfg)
 		case rr::Optimization::Pass::CFGSimplification: fpm.addPass(llvm::SimplifyCFGPass()); break;
 		case rr::Optimization::Pass::LICM: fpm.addPass(llvm::createFunctionToLoopPassAdaptor(
 			llvm::LICMPass(llvm::SetLicmMssaOptCap, llvm::SetLicmMssaNoAccForPromotionCap, true), true));
+			fpm.addPass(llvm::createFunctionToLoopPassAdaptor(llvm::LoopUnrollAndJamPass()));
+			fpm.addPass(llvm::IRCEPass());
 			break;
 		case rr::Optimization::Pass::AggressiveDCE: fpm.addPass(llvm::ADCEPass()); break;
 		case rr::Optimization::Pass::GVN: fpm.addPass(llvm::GVNPass()); break;
@@ -927,9 +934,9 @@ void JITBuilder::optimize(const rr::Config &cfg)
 		case rr::Optimization::Pass::Reassociate: fpm.addPass(llvm::ReassociatePass()); break;
 		case rr::Optimization::Pass::DeadStoreElimination: fpm.addPass(llvm::DSEPass()); break;
 		case rr::Optimization::Pass::SCCP: fpm.addPass(llvm::SCCPPass()); break;
-		case rr::Optimization::Pass::ScalarReplAggregates: fpm.addPass(llvm::SROAPass(llvm::SROAOptions::PreserveCFG)); break;
+		case rr::Optimization::Pass::ScalarReplAggregates: fpm.addPass(llvm::SROAPass(llvm::SROAOptions::ModifyCFG)); break;
 		case rr::Optimization::Pass::EarlyCSEPass: fpm.addPass(llvm::EarlyCSEPass()); break;
-		case rr::Optimization::Pass::Inline: cgpm.addPass(llvm::InlinerPass()); pm.addPass(llvm::GlobalDCEPass()); break;
+		case rr::Optimization::Pass::Inline: cgpm.addPass(llvm::InlinerPass()); pm.addPass(llvm::GlobalDCEPass()); pm.addPass(llvm::ModuleInlinerPass()); break;
 		default:
 			UNREACHABLE("pass: %d", int(pass));
 		}
