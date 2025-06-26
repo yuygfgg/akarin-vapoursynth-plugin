@@ -27,13 +27,11 @@ sources_expr2 = [
   'expr2/exprfilter.cpp',
   'expr2/reactor/CPUID.cpp',
   'expr2/reactor/Debug.cpp',
-  'expr2/reactor/EmulatedIntrinsics.cpp',
   'expr2/reactor/ExecutableMemory.cpp',
   'expr2/reactor/LLVMAsm.cpp',
   'expr2/reactor/LLVMJIT.cpp',
   'expr2/reactor/LLVMReactor.cpp',
   'expr2/reactor/LLVMReactorDebugInfo.cpp',
-  'expr2/reactor/OptimalIntrinsics.cpp',
   'expr2/reactor/Reactor.cpp',
   'expr2/reactor/ReactorDebugInfo.cpp',
 ]

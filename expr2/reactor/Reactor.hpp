@@ -308,6 +308,8 @@ public:
 
 	Value *value() const { return val; }
 
+	static int element_count() { return T::element_count(); }
+
 private:
 	Value *const val;
 };
@@ -2454,6 +2456,7 @@ public:
 	//	RValue<Float2> operator=(const SwizzleMask1<T> &rhs);
 
 	static Type *type();
+	static int element_count() { return 2; }
 };
 
 //	RValue<Float2> operator+(RValue<Float2> lhs, RValue<Float2> rhs);
@@ -2528,6 +2531,7 @@ public:
 	static Float4 infinity();
 
 	static Type *type();
+	static int element_count() { return 4; }
 
 private:
 	void constant(float x, float y, float z, float w);
@@ -2686,6 +2690,7 @@ public:
 	static Float8 infinity();
 
 	static Type *type();
+	static int element_count() { return 8; }
 
 private:
 	void constant(float x, float y, float z, float w, float a, float b, float c, float d);
@@ -2795,6 +2800,45 @@ static inline RValue<Float8> Exp(RValue<Float8> x) { return Exp<Float8>(x); }
 static inline RValue<Float8> Log(RValue<Float8> x) { return Log<Float8>(x); }
 static inline RValue<Float8> Exp2(RValue<Float8> x) { return Exp2<Float8>(x); }
 static inline RValue<Float8> Log2(RValue<Float8> x) { return Log2<Float8>(x); }
+
+// Call a unary C function on each element of a vector type.
+template<typename Func, typename T>
+inline RValue<T> ScalarizeCall(Func func, const RValue<T> &x)
+{
+	T result;
+	for(int i = 0; i < T::element_count(); i++)
+	{
+		result = Insert(result, Call(func, Extract(x, i)), i);
+	}
+
+	return result;
+}
+
+// Call a binary C function on each element of a vector type.
+template<typename Func, typename T>
+inline RValue<T> ScalarizeCall(Func func, const RValue<T> &x, const RValue<T> &y)
+{
+	T result;
+	for(int i = 0; i < T::element_count(); i++)
+	{
+		result = Insert(result, Call(func, Extract(x, i), Extract(y, i)), i);
+	}
+
+	return result;
+}
+
+// Call a ternary C function on each element of a vector type.
+template<typename Func, typename T>
+inline RValue<T> ScalarizeCall(Func func, const RValue<T> &x, const RValue<T> &y, const RValue<T> &z)
+{
+	T result;
+	for(int i = 0; i < T::element_count(); i++)
+	{
+		result = Insert(result, Call(func, Extract(x, i), Extract(y, i), Extract(z, i)), i);
+	}
+
+	return result;
+}
 
 // Bit Manipulation functions.
 // TODO: Currently unimplemented for Subzero.
