@@ -1,5 +1,5 @@
 /*
-* Copyright (c) 2012-2019 Fredrik Mellbin
+* Copyright (c) 2012-2020 Fredrik Mellbin
 *
 * This file is part of VapourSynth.
 *
@@ -18,7 +18,7 @@
 * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 */
 
-#include <string.h>
+#include <cstring>
 
 #include "cpufeatures.h"
 
