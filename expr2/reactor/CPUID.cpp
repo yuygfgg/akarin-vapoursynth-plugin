@@ -36,7 +36,6 @@ bool CPUID::SSE2 = detectSSE2();
 bool CPUID::SSE3 = detectSSE3();
 bool CPUID::SSSE3 = detectSSSE3();
 bool CPUID::SSE4_1 = detectSSE4_1();
-bool CPUID::AVX = detectAVX();
 bool CPUID::F16C = detectF16C();
 
 bool CPUID::enableMMX = true;
@@ -185,35 +184,21 @@ void CPUID::setEnableF16C(bool enable)
 	enableF16C = enable;
 }
 
-static void cpuid(int registers[4], int info)
+static void cpuid(int eax_ebx_ecx_edx[4], int eax, int ecx = 0)
 {
 #if defined(__i386__) || defined(__x86_64__)
 #	if defined(_WIN32)
-	__cpuid(registers, info);
+	__cpuidex(eax_ebx_ecx_edx, eax, ecx);
 #	else
 	__asm volatile("cpuid"
-	               : "=a"(registers[0]), "=b"(registers[1]), "=c"(registers[2]), "=d"(registers[3])
-	               : "a"(info));
+	               : "=a"(eax_ebx_ecx_edx[0]), "=b"(eax_ebx_ecx_edx[1]), "=c"(eax_ebx_ecx_edx[2]), "=d"(eax_ebx_ecx_edx[3])
+	               : "a"(eax), "c"(ecx));
 #	endif
 #else
-	registers[0] = 0;
-	registers[1] = 0;
-	registers[2] = 0;
-	registers[3] = 0;
-#endif
-}
-
-static unsigned long long xgetbv(unsigned ecx) {
-#if defined(__i386__) || defined(__x86_64__)
-#	if defined(_WIN32)
-	return _xgetbv(ecx);
-#	else
-	unsigned eax, edx;
-	__asm("xgetbv" : "=a"(eax), "=d"(edx) : "c"(ecx) : );
-	return (((unsigned long long)edx) << 32) | eax;
-#	endif
-#else
-	return 0;
+	eax_ebx_ecx_edx[0] = 0;
+	eax_ebx_ecx_edx[1] = 0;
+	eax_ebx_ecx_edx[2] = 0;
+	eax_ebx_ecx_edx[3] = 0;
 #endif
 }
 
@@ -273,15 +258,23 @@ bool CPUID::detectF16C()
 	return F16C = (registers[2] & 0x20000000) != 0;
 }
 
-bool CPUID::detectAVX()
+bool CPUID::supportsAVX2()
 {
-	int registers[4];
-	cpuid(registers, 1);
-	if ((registers[2] & (1 << 27)) && (registers[2] & (1 << 28))) {
-		unsigned long long xedxeax = xgetbv(0);
-		return AVX = ((xedxeax & 0x06) == 0x06);
+	int eax_ebx_ecx_edx[4];
+	cpuid(eax_ebx_ecx_edx, 1);
+	// Test bits 12 (FMA), 27 (OSXSAVE), and 28 (AVX) of ECX
+	bool osxsave_avx_fma = (eax_ebx_ecx_edx[2] & 0x18001000) == 0x18001000;
+
+	// AVX is a prerequisite of AVX2 and must be checked for first according to the Intel Software Developer's Manual.
+	// OSXSAVE ensures the operating system can save/restore ymm registers on context switches.
+	// FMA support is often considered an integral part of AVX2.
+	if(!osxsave_avx_fma)
+	{
+		return false;
 	}
-	return false;
+
+	cpuid(eax_ebx_ecx_edx, 7, 0);  // Valid if AVX is supported
+	return (eax_ebx_ecx_edx[1] & 0x00000020) != 0;
 }
 
 }  // namespace rr

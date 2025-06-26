@@ -540,13 +540,13 @@ class ExternalSymbolGenerator : public llvm::orc::JITDylib::DefinitionGenerator
 			functions.try_emplace("memset", reinterpret_cast<void *>(memset));
 
 #ifdef __APPLE__
-			functions.try_emplace("sincosf_stret", reinterpret_cast<void *>(__sincosf_stret));
+			functions.try_emplace("__sincosf_stret", reinterpret_cast<void *>(__sincosf_stret));
 #elif defined(__linux__)
 			functions.try_emplace("sincosf", reinterpret_cast<void *>(sincosf));
 #elif defined(_WIN64)
-			functions.try_emplace("chkstk", reinterpret_cast<void *>(__chkstk));
+			functions.try_emplace("__chkstk", reinterpret_cast<void *>(__chkstk));
 #elif defined(_WIN32)
-			functions.try_emplace("chkstk", reinterpret_cast<void *>(_chkstk));
+			functions.try_emplace("_chkstk", reinterpret_cast<void *>(_chkstk));
 #endif
 
 #ifdef __ARM_EABI__

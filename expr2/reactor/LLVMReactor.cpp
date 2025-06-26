@@ -3992,7 +3992,7 @@ RValue<Int8> RoundInt(RValue<Float8> cast)
 {
 	RR_DEBUG_INFO_UPDATE_LOC();
 #if defined(__i386__) || defined(__x86_64__)
-	if(CPUID::supportsAVX())
+	if(CPUID::supportsAVX2())
 		return x86::cvtps2dq(cast);
 #endif
 	return As<Int8>(V(lowerRoundInt(V(cast.value()), T(Int8::type()))));
@@ -4976,7 +4976,7 @@ RValue<Float8> TryFP16To32(RValue<UShort8> x, bool &ok)
 	ok = false;
 #if (defined(__i386__) || defined(__x86_64__)) && LLVM_VERSION_MAJOR < 11
 	// LLVM 11+ removed this intrinsic.
-	if (!CPUID::supportsF16C() || !CPUID::supportsAVX())
+	if (!CPUID::supportsF16C() || !CPUID::supportsAVX2())
 		return res;
 	ok = true;
 	llvm::Value *vx = V(x.value());
@@ -4996,7 +4996,7 @@ RValue<UShort8> TryFP32To16(RValue<Float8> x, bool &ok)
 	UShort8 res = 0;
 	ok = false;
 #if (defined(__i386__) || defined(__x86_64__)) && LLVM_VERSION_MAJOR < 11
-	if (!CPUID::supportsF16C() || !CPUID::supportsAVX())
+	if (!CPUID::supportsF16C() || !CPUID::supportsAVX2())
 		return res;
 	ok = true;
 	llvm::Value *vx = V(x.value());

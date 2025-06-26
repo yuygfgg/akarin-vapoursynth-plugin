@@ -36,7 +36,7 @@ public:
 	static bool supportsSSE3();
 	static bool supportsSSSE3();
 	static bool supportsSSE4_1();
-	static bool supportsAVX();
+	static bool supportsAVX2();  // Also ensures support for OSXSAVE and FMA
 	static bool supportsF16C();
 
 	static void setEnableMMX(bool enable);
@@ -77,7 +77,6 @@ private:
 	static bool detectSSE3();
 	static bool detectSSSE3();
 	static bool detectSSE4_1();
-	static bool detectAVX();
 	static bool detectF16C();
 };
 
@@ -125,11 +124,6 @@ inline bool CPUID::supportsSSSE3()
 inline bool CPUID::supportsSSE4_1()
 {
 	return SSE4_1 && enableSSE4_1;
-}
-
-inline bool CPUID::supportsAVX()
-{
-	return AVX && enableAVX;
 }
 
 inline bool CPUID::supportsF16C()
