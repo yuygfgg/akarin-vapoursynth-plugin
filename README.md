@@ -203,7 +203,7 @@ If the `opt` argument is set to 1 (default 0), then it will activate an integer 
 
 Building
 --------
-To build the plugin, you will need LLVM 10-12 installed (on Windows, you need to build your own) and have llvm-config exectuable in your PATH, then run:
+To build the plugin, you will need LLVM 19-20 installed (on Windows, you need to build your own) and have llvm-config executable in your PATH, then run:
 ```
 meson build
 ninja -C build install
@@ -211,7 +211,7 @@ ninja -C build install
 
 Example LLVM build procedure on windows:
 ```
-git clone --depth 1 https://github.com/llvm/llvm-project.git --branch release/12.x
+git clone --depth 1 https://github.com/llvm/llvm-project.git --branch release/20.x
 cd llvm-project
 mkdir build
 cd build
