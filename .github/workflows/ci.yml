@@ -34,3 +34,63 @@ jobs:
 
       - name: Build
         run: nix build -L .#llvm_${{ matrix.llvm }}
+
+  build-windows:
+    runs-on: windows-latest
+    permissions:
+      attestations: write
+      contents: read
+      id-token: write
+    defaults:
+      run:
+        shell: msys2 {0}
+    strategy:
+      fail-fast: false
+      matrix:
+        buildtype: [debugoptimized, release]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4.2.2
+
+      - uses: msys2/setup-msys2@v2.28.0
+        with:
+          msystem: ucrt64
+          update: true
+          pacboy: >-
+            gcc:p
+            meson:p
+            ninja:p
+            pkg-config:p
+            llvm:p
+            libxml2:p
+            vapoursynth:p
+
+      - name: Configure and build
+        run: |
+          meson setup builddir --buildtype ${{ matrix.buildtype }} --prefer-static --default-library=static -Dcpp_link_args=-static
+          meson compile -C builddir
+
+      - name: Rename DLL
+        run: mv builddir/libakarin.dll builddir/akarin.dll
+
+      - name: Attest build provenance
+        if: github.event_name != 'pull_request'
+        uses: actions/attest-build-provenance@v2.4.0
+        with:
+          subject-path: builddir/akarin.dll
+
+      # HACK: only necessary for `libzstd.dll` for LLVM 17 and above.
+      - name: Copy dependencies
+        run: ldd builddir/akarin.dll | grep -vi '/windows' | grep -v 'VSScript' | awk '{print $3}' | xargs -l1 cp -t builddir
+
+      - name: Upload
+        uses: actions/upload-artifact@v4.6.2
+        with:
+          name: akarin-win64-${{ matrix.buildtype }}
+          path: |
+            builddir/akarin.dll
+            builddir/libzstd.dll
+
+      - name: Dump Meson logs
+        if: failure()
+        run: cat builddir/meson-logs/meson-log.txt builddir/compile_commands.json

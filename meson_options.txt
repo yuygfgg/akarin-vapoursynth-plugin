@@ -1,2 +1,5 @@
+option('asmjit', type: 'boolean', value: false,
+       description: 'Whether to use the asmjit backend')
+
 option('static-llvm', type: 'boolean', value: true,
        description: 'Whether to statically link LLVM')

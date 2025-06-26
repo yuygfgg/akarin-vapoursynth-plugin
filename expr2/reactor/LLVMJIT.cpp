@@ -53,15 +53,14 @@ __pragma(warning(push))
 #include "llvm/Transforms/Scalar/SROA.h"
 #include "llvm/Transforms/Scalar/SimplifyCFG.h"
 
-#include "llvm/Transforms/IPO.h"
-
 #ifdef _MSC_VER
     __pragma(warning(pop))
 #endif
 
-#if defined(_WIN64)
+// Half-borrowed from <https://github.com/msys2/MINGW-packages/blob/d634579a4749f3a78f86c0eacc8f42ad9dfdea6c/mingw-w64-angleproject/004-swiftshader-updates.patch#L277-L280>
+#if defined(_MSC_VER) && defined(_WIN64)
         extern "C" void __chkstk();
-#elif defined(_WIN32)
+#elif defined(_MSC_VER) && defined(_WIN32)
 extern "C" void _chkstk();
 #elif defined(__MINGW64__)
 extern "C" void ___chkstk_ms();
@@ -170,13 +169,7 @@ JITGlobals *JITGlobals::get()
 			"-x86-asm-syntax=intel",  // Use Intel syntax rather than the default AT&T
 #endif
 #if LLVM_VERSION_MAJOR <= 12
-			"-warn-stack-size=524288"  // Warn when a function uses more than 512 KiB of stack memory
-#else
-		// TODO(b/191193823): TODO(ndesaulniers): Update this after
-		// go/compilers/fc018ebb608ee0c1239b405460e49f1835ab6175
-#	if LLVM_VERSION_MAJOR < 9999
-#		warning Implement stack size checks using the "warn-stack-size" function attribute.
-#	endif
+			"-warn-stack-size=524288",  // Warn when a function uses more than 512 KiB of stack memory
 #endif
 		};
 
@@ -545,9 +538,10 @@ class ExternalSymbolGenerator : public llvm::orc::JITDylib::DefinitionGenerator
 			functions.try_emplace("__sincosf_stret", reinterpret_cast<void *>(__sincosf_stret));
 #elif defined(__linux__)
 			functions.try_emplace("sincosf", reinterpret_cast<void *>(sincosf));
-#elif defined(_WIN64)
+// Half-borrowed from <https://github.com/msys2/MINGW-packages/blob/d634579a4749f3a78f86c0eacc8f42ad9dfdea6c/mingw-w64-angleproject/004-swiftshader-updates.patch#L277-L280>
+#elif defined(_MSC_VER) && defined(_WIN64)
 			functions.try_emplace("__chkstk", reinterpret_cast<void *>(__chkstk));
-#elif defined(_WIN32)
+#elif defined(_MSC_VER) && defined(_WIN32)
 			functions.try_emplace("_chkstk", reinterpret_cast<void *>(_chkstk));
 #elif defined(__MINGW64__)
 			functions.try_emplace("___chkstk_ms", reinterpret_cast<void *>(___chkstk_ms));
@@ -596,7 +590,7 @@ class ExternalSymbolGenerator : public llvm::orc::JITDylib::DefinitionGenerator
 	};
 
 	llvm::Error tryToGenerate(
-#if LLVM_VERSION_MAJOR >= 12 /* TODO(b/165000222): Unconditional after LLVM 11 upgrade */
+#if LLVM_VERSION_MAJOR >= 11 /* TODO(b/165000222): Unconditional after LLVM 11 upgrade */
 	    llvm::orc::LookupState &state,
 #endif
 	    llvm::orc::LookupKind kind,
@@ -627,8 +621,8 @@ class ExternalSymbolGenerator : public llvm::orc::JITDylib::DefinitionGenerator
 #if LLVM_VERSION_MAJOR < 17
 			auto toSymbol = [](void *ptr) {
 				return llvm::JITEvaluatedSymbol(
-					static_cast<llvm::JITTargetAddress>(reinterpret_cast<uintptr_t>(ptr)),
-					llvm::JITSymbolFlags::Exported);
+				    static_cast<llvm::JITTargetAddress>(reinterpret_cast<uintptr_t>(ptr)),
+				    llvm::JITSymbolFlags::Exported);
 			};
 #else
 			auto toSymbol = [](void *ptr) {
@@ -824,11 +818,8 @@ public:
 			// This is where the actual compilation happens.
 			auto symbol = session.lookup({ &dylib }, functionNames[i]);
 
-			if (!symbol) {
-				llvm::errs() << "Failed to lookup address of routine function " << i << ": " <<
-					llvm::toString(symbol.takeError()) << '\n';
-				abort();
-			}
+			ASSERT_MSG(symbol, "Failed to lookup address of routine function %d: %s",
+			           (int)i, llvm::toString(symbol.takeError()).c_str());
 
 			if(fatalCompileIssue)
 			{
@@ -890,6 +881,25 @@ JITBuilder::JITBuilder(const rr::Config &config)
 
 void JITBuilder::optimize(const rr::Config &cfg)
 {
+	if(coroutine.id)  // Run mandatory coroutine transforms.
+	{
+		llvm::PassBuilder pb;
+		llvm::LoopAnalysisManager lam;
+		llvm::FunctionAnalysisManager fam;
+		llvm::CGSCCAnalysisManager cgam;
+		llvm::ModuleAnalysisManager mam;
+
+		pb.registerModuleAnalyses(mam);
+		pb.registerCGSCCAnalyses(cgam);
+		pb.registerFunctionAnalyses(fam);
+		pb.registerLoopAnalyses(lam);
+		pb.crossRegisterProxies(lam, fam, cgam, mam);
+
+		llvm::ModulePassManager mpm =
+		    pb.buildO0DefaultPipeline(llvm::OptimizationLevel::O0);
+		mpm.run(*module, mam);
+	}
+
 #ifdef ENABLE_RR_DEBUG_INFO
 	if(debugInfo != nullptr)
 	{
@@ -911,15 +921,6 @@ void JITBuilder::optimize(const rr::Config &cfg)
 
 	llvm::ModulePassManager pm;
 	llvm::FunctionPassManager fpm;
-
-#if REACTOR_ENABLE_MEMORY_SANITIZER_INSTRUMENTATION
-	if(__has_feature(memory_sanitizer))
-	{
-		llvm::MemorySanitizerOptions msanOpts;
-		pm.addPass(llvm::ModuleMemorySanitizerPass(msanOpts));
-		pm.addPass(llvm::createModuleToFunctionPassAdaptor(llvm::MemorySanitizerPass(msanOpts)));
-	}
-#endif
 
 	for(auto pass : cfg.getOptimization().getPasses())
 	{
@@ -946,7 +947,7 @@ void JITBuilder::optimize(const rr::Config &cfg)
 
 	if(!fpm.isEmpty())
 	{
-			pm.addPass(llvm::createModuleToFunctionPassAdaptor(std::move(fpm)));
+		pm.addPass(llvm::createModuleToFunctionPassAdaptor(std::move(fpm)));
 	}
 
 	pm.run(*module, mam);

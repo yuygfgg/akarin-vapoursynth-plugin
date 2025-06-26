@@ -24,16 +24,9 @@
 
 #include "llvm/IR/Intrinsics.h"
 #include "llvm/IR/IntrinsicsX86.h"
-#include "llvm/IR/LegacyPassManager.h"
-#include <llvm/IR/Module.h>
-#include "llvm/IR/Verifier.h"
+#include "llvm/IR/Module.h"
 #include "llvm/Support/Alignment.h"
 #include "llvm/Support/ManagedStatic.h"
-#if LLVM_VERSION_MAJOR < 15
-#include "llvm/Transforms/Coroutines.h"
-#endif
-#include "llvm/Transforms/IPO.h"
-#include "llvm/Transforms/Scalar.h"
 
 #include <fstream>
 #include <iostream>

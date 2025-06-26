@@ -12,7 +12,9 @@ version_h = declare_dependency(
     )
 )
 
-use_asmjit = false
+is_windows = target_machine.system() == 'windows' or target_machine.system() == 'cygwin'
+use_asmjit = get_option('asmjit')
+static_llvm = get_option('static-llvm')
 
 sources_expr = [
   # expr
@@ -85,13 +87,22 @@ if use_asmjit
 else
   sources = sources_common + sources_expr2
   incdir += include_directories('expr2/reactor')
-  deps += dependency('llvm', version: ['>= 10.0', '< 21'], method: 'config-tool', static: get_option('static-llvm'),
+  deps += dependency('llvm', version: ['>= 10.0', '< 21'], method: 'config-tool', static: static_llvm,
     modules: [
       'asmprinter', 'executionengine', 'target', 'orcjit', 'native',
     ])
+
+  if static_llvm and is_windows
+    # HACK: work around multiple definition of `llvm::getTypeName<llvm::LICMPass>()::Name`.
+    add_project_link_arguments('-Wl,--allow-multiple-definition', language: 'cpp')
+  endif
 endif
 
-if target_machine.system() == 'windows'
+libs = []
+
+if is_windows
+  add_project_arguments('-DVS_TARGET_OS_WINDOWS', language: 'cpp')
+
   # DLISR and DLVFX only supports Windows.
   sources += sources_ngx + sources_vfx
   incdir += include_directories('vfx/nvvfx/include')
@@ -102,8 +113,6 @@ sources += sources_banding
 sources += sources_text
 
 vapoursynth_dep = dependency('vapoursynth').partial_dependency(compile_args: true, includes: true)
-
-libs = []
 
 shared_module('akarin', sources,
   dependencies: deps + [ vapoursynth_dep, version_h ],
