@@ -27,6 +27,7 @@
 #include <limits>
 #include <map>
 #include <memory>
+#include <numbers>
 #include <numeric>
 #include <regex>
 #include <set>
@@ -267,7 +268,7 @@ ExprOp decodeToken(const std::string &token, bool extended = false)
         { "dup",  { ExprOpType::DUP, 0 } },
         { "swap", { ExprOpType::SWAP, 1 } },
         { "drop", { ExprOpType::DROP, 1 } },
-        { "pi",   { ExprOpType::CONSTANTF, static_cast<float>(M_PI) } },
+        { "pi",   { ExprOpType::CONSTANTF, std::numbers::pi_v<float> } },
         { "N",    { ExprOpType::CONST_LOAD, static_cast<int>(LoadConstType::N) } },
         { "X",    { ExprOpType::CONST_LOAD, static_cast<int>(LoadConstType::X) } },
         { "Y",    { ExprOpType::CONST_LOAD, static_cast<int>(LoadConstType::Y) } },

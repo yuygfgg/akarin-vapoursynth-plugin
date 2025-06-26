@@ -1,5 +1,5 @@
 project('Plugin', 'c', 'cpp',
-  default_options: ['buildtype=release', 'b_ndebug=if-release', 'c_std=c99', 'cpp_std=c++17'],
+  default_options: ['buildtype=release', 'b_ndebug=if-release', 'c_std=c99', 'cpp_std=c++20'],
   meson_version: '>=0.48.0',
   version: '8'
 )

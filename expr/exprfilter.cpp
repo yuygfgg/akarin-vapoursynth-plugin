@@ -26,6 +26,7 @@
 #include <locale>
 #include <map>
 #include <memory>
+#include <numbers>
 #include <set>
 #include <sstream>
 #include <stdexcept>
@@ -111,7 +112,8 @@ enum MemConstIndex {
     CLIP_X = MAX_EXPR_INPUTS, // sentinel clip index for the list of X coordinates
 };
 
-#ifdef VS_TARGET_CPU_X86
+// Technically we only want to avoid clang-cl
+#if !defined(__clang__)
 static_assert(static_cast<int>(ComparisonType::EQ) == _CMP_EQ_OQ, "");
 static_assert(static_cast<int>(ComparisonType::LT) == _CMP_LT_OS, "");
 static_assert(static_cast<int>(ComparisonType::LE) == _CMP_LE_OS, "");
@@ -2430,7 +2432,7 @@ Token decodeToken(const std::string &token)
         { "cos",  { ExprOpType::COS } },
         { "trunc",{ ExprOpType::TRUNC } },
         { "round",{ ExprOpType::ROUND } },
-        { "pi",   { ExprOpType::CONSTANT, static_cast<float>(M_PI) } },
+        { "pi",   { ExprOpType::CONSTANT, std::numbers::pi_v<float> } },
         { "dup",  { ExprOpType::DUP, 0 } },
         { "swap", { ExprOpType::SWAP, 1 } },
     };
