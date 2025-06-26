@@ -96,6 +96,7 @@ endif
 if target_machine.system() == 'windows'
   # DLISR and DLVFX only supports Windows.
   sources += sources_ngx + sources_vfx
+  incdir += include_directories('vfx/nvvfx/include')
   add_project_arguments('-DHAVE_NGX', '-DHAVE_VFX', language: 'cpp')
 endif
 
