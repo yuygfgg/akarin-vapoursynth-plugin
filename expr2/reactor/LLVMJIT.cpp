@@ -616,9 +616,13 @@ class ExternalSymbolGenerator : public llvm::orc::JITDylib::DefinitionGenerator
 		{
 			auto name = symbol.first;
 
-			// Trim off any underscores from the start of the symbol. LLVM likes
-			// to append these on macOS.
-			auto trimmed = (*name).drop_while([](char c) { return c == '_'; });
+#if defined(__APPLE__)
+			// Trim the underscore from the start of the symbol. LLVM adds it for Mach-O mangling convention.
+			ASSERT((*name)[0] == '_');
+			auto unmangled = (*name).drop_front(1);
+#else
+			auto unmangled = *name;
+#endif
 
 #if LLVM_VERSION_MAJOR < 17
 			auto toSymbol = [](void *ptr) {
@@ -635,31 +639,31 @@ class ExternalSymbolGenerator : public llvm::orc::JITDylib::DefinitionGenerator
 			};
 #endif
 
-			auto it = resolver.functions.find(trimmed.str());
+			auto it = resolver.functions.find(unmangled.str());
 			if(it != resolver.functions.end())
 			{
 				symbols[name] = toSymbol(it->second);
 				continue;
 			}
 
-#if __has_feature(memory_sanitizer)
-			// MemorySanitizer uses a dynamically linked runtime. Instrumented routines reference
-			// some symbols from this library. Look them up dynamically in the default namespace.
+#if __has_feature(memory_sanitizer) || (__has_feature(address_sanitizer) && ADDRESS_SANITIZER_INSTRUMENTATION_SUPPORTED)
+			// Sanitizers use a dynamically linked runtime. Instrumented routines reference some
+			// symbols from this library. Look them up dynamically in the default namespace.
 			// Note this approach should not be used for other symbols, since they might not be
 			// visible (e.g. due to static linking), we may wish to provide an alternate
 			// implementation, and/or it would be a security vulnerability.
 
-			void *address = dlsym(RTLD_DEFAULT, (*symbol.first).data());
+			void *address = dlsym(RTLD_DEFAULT, unmangled.data());
 
 			if(address)
 			{
-				symbols[name] = toSymbol(it->second);
+				symbols[name] = toSymbol(address);
 				continue;
 			}
 #endif
 
 #if !defined(NDEBUG) || defined(DCHECK_ALWAYS_ON)
-			missing += (missing.empty() ? "'" : ", '") + (*name).str() + "'";
+			missing += (missing.empty() ? "'" : ", '") + unmangled.str() + "'";
 #endif
 		}
 
