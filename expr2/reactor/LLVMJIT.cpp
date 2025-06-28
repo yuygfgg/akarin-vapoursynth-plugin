@@ -63,6 +63,8 @@ __pragma(warning(push))
         extern "C" void __chkstk();
 #elif defined(_WIN32)
 extern "C" void _chkstk();
+#elif defined(__MINGW64__)
+extern "C" void ___chkstk_ms();
 #endif
 
 #ifdef __ARM_EABI__
@@ -547,6 +549,8 @@ class ExternalSymbolGenerator : public llvm::orc::JITDylib::DefinitionGenerator
 			functions.try_emplace("__chkstk", reinterpret_cast<void *>(__chkstk));
 #elif defined(_WIN32)
 			functions.try_emplace("_chkstk", reinterpret_cast<void *>(_chkstk));
+#elif defined(__MINGW64__)
+			functions.try_emplace("___chkstk_ms", reinterpret_cast<void *>(___chkstk_ms));
 #endif
 
 #ifdef __ARM_EABI__
