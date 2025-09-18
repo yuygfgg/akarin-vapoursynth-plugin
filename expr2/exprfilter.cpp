@@ -1311,7 +1311,8 @@ typename Compiler<lanes>::Helper Compiler<lanes>::buildHelpers(rr::Module &mod)
     {
         FloatV x = h.Pow->template Arg<0>();
         FloatV y = h.Pow->template Arg<1>();
-        Return(h.Exp->Call(h.Log->Call(x) * y));
+        // Return(h.Exp->Call(h.Log->Call(x) * y));
+        Return(BuiltinPow(x, y));
     }
 
     return h;
